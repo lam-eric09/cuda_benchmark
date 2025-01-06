@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <cmath>
 
-#define N 100000000
+constexpr int N = 100000000;
 
 __global__ void vector_add(double *out, double *a, double *b){
     int i = threadIdx.x + blockIdx.x * blockDim.x;
@@ -23,8 +23,8 @@ int main(){
     std::vector<double> out(N);
 
     for (int i=0; i<N; i++){
-        a[i] = 1L;
-        b[i] = 2L;
+        a[i] = 1.0;
+        b[i] = 2.0;
     }
 
     // Allocate device memory
@@ -41,7 +41,6 @@ int main(){
     int thread_per_block = 64;
     int total_blocks = ceil((N+thread_per_block-1)/thread_per_block);
     vector_add<<<total_blocks,thread_per_block>>>(d_out, d_a, d_b);
-    cudaDeviceSynchronize();
 
     cudaMemcpy(out.data(), d_out, bytes, cudaMemcpyDeviceToHost);
 
