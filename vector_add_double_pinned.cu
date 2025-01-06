@@ -1,3 +1,25 @@
+/*
+ * File: vector_add_double_pinned.cu
+ * Description:
+ *     This program demonstrates element-wise addition of two large double arrays 
+ *     using CUDA, with pinned host memory and re-usage of allocated memory.
+ *     The aim is to show the performance gain that can be achieved when addressing the
+ *     major bottlenecks of a naive vector addition implementation in CUDA, which are:
+ *     - Copy from host to device and vice versa when the memory allocated on host is pageable
+ *     - Frequent allocation and deallocation of memory 
+ * 
+ * Usage:
+ *     nvcc -arch=sm_50 vector_add_double_pinned.cu -o vector_add_double_pinned
+ *     ./vector_add_double_pinned
+ * 
+ * Note:
+ *     K defines the number of time the kernel function is called. Increase it to see how beneficial re-usage of memory is.
+ *     N is the size of the double arrays.
+ *     Be cautious of memory usage when setting large values for N.
+ *     one double takes 8 bytes, so N = 1e08 takes 800MB.
+ *     Three arrays are manipulated, taking a total of 2.4GB.
+ */
+
 #include <cstdlib>
 #include <iostream>
 #include <cuda_runtime_api.h>
@@ -5,32 +27,19 @@
 #include <stdio.h>
 #include <cmath>
 
-#define N 100000000
+constexpr int K = 5;
+constexpr int N = 100000000;
 
 __global__ void add_vector(double *out, double *a, double *b){
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i<N) out[i] = a[i] + b[i];
 }
 
-int main(){
-    double *out, *a, *b;
-    int bytes = N*sizeof(double);
-
-    // Allocate pinned non pageable memory in host
-    cudaMallocHost((void**)&out, bytes);
-    cudaMallocHost((void**)&a, bytes);
-    cudaMallocHost((void**)&b, bytes);
-
-    // Allocate device memory
-    double *d_out, *d_a, *d_b;
-    cudaMalloc((void**)&d_out, bytes);
-    cudaMalloc((void**)&d_a, bytes);
-    cudaMalloc((void**)&d_b, bytes);
-    
+void run_kernel(double *out, double *a, double *b, double *d_out, double *d_a, double *d_b, size_t bytes){
     // Initialize data
     for (int i=0; i<N; i++){
-        a[i] = 1L;
-        b[i] = 2L;
+        a[i] = 1.0;
+        b[i] = 2.0;
     }
         
     // Copy to device
@@ -47,6 +56,29 @@ int main(){
 
     std::cout << N-1 << out[N-1] << std::endl;
 
+}
+
+int main(){
+    double *out, *a, *b;
+    int bytes = N*sizeof(double);
+
+    // Allocate pinned non pageable memory in host
+    cudaMallocHost((void**)&out, bytes);
+    cudaMallocHost((void**)&a, bytes);
+    cudaMallocHost((void**)&b, bytes);
+
+    // Allocate device memory
+    double *d_out, *d_a, *d_b;
+    cudaMalloc((void**)&d_out, bytes);
+    cudaMalloc((void**)&d_a, bytes);
+    cudaMalloc((void**)&d_b, bytes);
+
+    // Calling the kernel K times
+    for(int i=0; i<K; i++){
+        run_kernel(out, a, b, d_out, d_a, d_b, bytes);
+    }
+
+    // Clean up 
     cudaFree(d_a);
     cudaFree(d_b);
     cudaFree(d_out);
